@@ -4,6 +4,9 @@ clients = []
 
 isStarted = False
 
+# TODO Высылать вопросы только после начала игры, 
+# реализовать механизм ожидания ответа кто быстрее, если через 5 сек ответа нет - следующий вопрос 
+ 
      
 def parse_response(response:str):
     tmp = response.strip()
@@ -44,18 +47,20 @@ async def get_user_data(writer):
 
 async def event_loop(reader, writer):
     if len(clients) == 0:
+        # its admin connections
         await get_user_data(writer)
         admintPermission = True
         await send_question(writer, 'U ADMIN! SEND 1 TO START THE GAME')
         await get_response(reader)
         
     if len(clients) == 4:
+        # send error message, to much players
         await send_question(writer, 'sorry, many players')
         writer.close()
         
         
     else:
-        
+        # send questions
         await get_user_data(writer)
         await send_question(writer, 'first question is')
         await get_response(reader)
