@@ -1,51 +1,42 @@
-import random
-import time
+import asyncio
 
-class TeleTournir():
-    def __init__(self):
-        self.player_limit = 4
-        self.questions = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k'} 
-        self.accept = 'tak'
-        self.decline = 'nie'
-        self.answer_time = 5
-        
-    def exception_handler(self, exception):
-        print('We have problem here {}'.format(exception))
-        
-    def get_5_questions(self) -> list():
-        """return 3 random elements from questions"""
-        return random.sample(self.questions, 3)
+clients = list()
 
-        
-class Client():
-    def __init__(self):
-        self.isFirst = False
-        self.count = 0
-        self.isKicked = False
+async def get_response(reader):
+    data = await reader.read(100)
+    message = data.decode()
+    striped_text = message.strip()
+    return striped_text
+
+# TODO Реализовать механизм старта , первый сокет отправляет start 
+# и остальным высылаются вопросы,  если игроки подключились, 
+# а админ не стартовал - вопросы не высылаются
+async def send_text(writer, message):
+    text = "{}\n".format(message)
+    writer.write(text.encode())
+    await writer.drain()
+
+
+async def event_loop(reader, writer):
+    clients.append(writer)
     
-
-
-
-def wait_answer():
-    start_time = time.time()
-    print('IM WAIT ANSWER!')
-    time.sleep(3)
+    print(await get_response(reader))
     
-    print("--- %s seconds ---" % (time.time() - start_time))
+    print('SEND BROADCATS')
     
+    for ws in clients:
+        await send_text(ws, 'TEST MESSAGE BROADCAST')
+    
+# Connection == отдельный цикл, по отдельности выполняются как бы
 
-def event_loop():
-    # W każdej z rund serwer rozsyła - 
-    # zapytania do graczy i czeka na tego, który da poprawną odpowiedź najszybciej,
-    t = TeleTournir()
-    randomed_questions = t.get_5_questions()
-    while randomed_questions:
-        print(randomed_questions.pop())
-        wait_answer()
-        time.sleep(5)
-    
-    
-            
-        
-        
-event_loop()
+async def main():
+    server = await asyncio.start_server(
+        event_loop, '127.0.0.1', 4004)
+
+    addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
+    print(f'Serving on {addrs}')
+
+    async with server:
+        await server.serve_forever()
+
+asyncio.run(main())
