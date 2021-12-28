@@ -1,17 +1,7 @@
 import asyncio
 import random
 import time
-
-class Game():
-    def __init__(self) -> None:
-        self.questions = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k'}
-
-    def get_random_questions_set(self):
-        return random.sample(self.questions, 3)
-    
-    def return_by_1(self):
-        for i in self.questions:
-            yield i
+import itertools
 
 
 clients_writers = []
@@ -25,20 +15,24 @@ clients_time_dict_2 = dict()
 clients_time_dict_3 = dict()
 
 
-questions = {'a':'tak', 'b':'nie', 
-                 'c':'tak', 'd':'nie', 
-                 'e':'tak', 'f':'nie',
-                 'g':'tak', 'h':'nie', 
-                 'j':'ta', 'k':'nie'}
+client_answer = dict()
+clients_without_answer = []
 
-q = random.sample(questions.keys(), 3)
+client_writer_score = dict()
 
-# Словарь клиент-время ответа
+questions = {'pytanie1':'tak', 'pytanie2':'nie', 
+                 'pytanie3':'tak', 'pytani4':'nie', 
+                 'pytanie5':'tak', 'pytanie6':'nie',
+                 'pytanie7':'tak', 'pytanie8':'nie', 
+                 'pytanie9':'tak', 'pytanie10':'nie'}
+
+questions_pool = random.sample(questions.keys(), 3)
+question_pool_item = ''
+
 
 is_more_then_5_sec = False
 
 def get_winner_in_clients(clients_dicts):
-    
     for key, value in clients_dicts.items():
         winner = value
         for time in clients_dicts.values():
@@ -53,23 +47,36 @@ async def get_response(reader):
     striped_text = message.strip()
     return striped_text
 
-async def receive_broadcast_response(clients_readers):
-    client_id = 0
-    for ws in clients_readers:
-        start = time.time()
-        await get_response(ws)
-        stop = time.time() - start
-        clients_time_dict[client_id] = stop
-        # if client_id == 0:
-        #     clients_time_dict_1[client_id] = stop
-        # if client_id == 1:
-        #     clients_time_dict_2[client_id] = stop
-        # if client_id == 2:
-        #     clients_time_dict_3[client_id] = stop
-        
-        
-            
-        client_id +=1
+def answers_matcher(client_text_answer:str):
+    """ we have key - question, we have answer - client text answer, 
+    want to match client answer to correct answer in dict, 
+    want to return number, correct = 1 pt, uncorect = -2 pt """
+    print('q pool item is ', question_pool_item)
+    correct_answer = questions.get(question_pool_item)
+    print('correct answer is ', correct_answer)
+    if correct_answer == client_text_answer.lower():
+        return 1
+    return -2
+    
+    
+    
+
+async def receive_broadcast_response(clients_readers, client_writers):
+    """client writers need to add to list clients, 
+    who dont send answer"""
+    
+    readers_writers: tuple = zip(clients_readers, client_writers)
+    
+    for client_socket in readers_writers:
+        reader = client_socket[0]
+        writer = client_socket[1]
+        try:
+            text = await asyncio.wait_for(get_response(reader=reader),
+                                          timeout=10)
+            print('CLIENT SEND ', text)
+            print(answers_matcher(text))
+        except asyncio.TimeoutError:
+            clients_without_answer.append(writer)
         
 
 async def send_text(writer, message):
@@ -77,15 +84,15 @@ async def send_text(writer, message):
     writer.write(text.encode())
     await writer.drain()
 
-async def send_broadcast_question(writer, clients_writers):
-    if q:
+async def send_broadcast_question(clients_writers):
         try:
-            print('QUESTIONS LIST IS' , q)
-            question = q.pop()
+            print('QUESTIONS LIST IS' , questions_pool)
+            global question_pool_item
+            question_pool_item = questions_pool.pop()
             for ws in clients_writers:
-                await send_text(writer=ws, message=question)
+                await send_text(writer=ws, message=question_pool_item)
         except IndexError as e:
-            pass
+            print('Index error in send broadcast questions')
     
 async def admin_connection(reader, writer):
     admin_text = await get_response(reader=reader)
@@ -93,10 +100,7 @@ async def admin_connection(reader, writer):
         return True
     return False
     
-
 async def event_loop(reader, writer):
-    
-    
     clients_writers.append(writer)
     clients_readers.append(reader)
     status = False
@@ -105,24 +109,19 @@ async def event_loop(reader, writer):
         status = await admin_connection(reader=reader, writer=writer)
         
     if status:
-        start = time.time()
-        count = -1
+        # start = time.time()
+        # count = -1
         while True:
-            await send_broadcast_question(writer=writer, clients_writers=clients_writers)
-            await receive_broadcast_response(clients_readers=clients_readers)
+            await send_broadcast_question(clients_writers=clients_writers)
+            await receive_broadcast_response(clients_readers=clients_readers,
+                                            client_writers=clients_writers)
+                                       
             
-            print('ROUND {} is end'.format(count))
-            count+=1
-            
-            if count == 0:
-                print(clients_time_dict)
-                print()
-                print('WINNER TIME IS ', get_winner_in_clients(clients_time_dict))
-                
-            
-            if count == 1:
-                print(clients_time_dict)
-                print('WINNER TIME IS ', get_winner_in_clients(clients_time_dict))
+            for client_writer in clients_without_answer:
+                await send_text(writer=client_writer, 
+                                message='Timeout! Be faster')
+                    
+            print(client_answer)
   
     
 async def main():
