@@ -64,32 +64,20 @@ def answers_matcher(client_text_answer:str):
 async def receive_broadcast_response(clients_readers, client_writers):
     """client writers need to add to list clients, 
     who dont send answer"""
-    res = []
+    
     readers_writers: tuple = zip(clients_readers, client_writers)
     score_clients = dict()
-    id = 0
-    tmp = [[]]
-    k = 0 
     for client_socket in readers_writers:
         reader = client_socket[0]
         writer = client_socket[1]
-        
-        
         try:
             text = await asyncio.wait_for(get_response(reader=reader),
                                           timeout=10)
             print('CLIENT SEND ', text)
             z = answers_matcher(text)
-            res.append(answers_matcher(text))
-            k+= z
-            score_clients.update({id:res})
-            id+=1
-            print(score_clients)
-            print('k is ', k)
             
-            
-            
-            
+            score_clients.update({id: 5555})
+               
             
         except asyncio.TimeoutError:
             clients_without_answer.append(writer)
