@@ -9,24 +9,24 @@ clients_readers = []
 responses = []
 MAX_PLAYERS = 4
 
-isEnd = False
-
-clients_time_dict = dict()
-clients_time_dict_1 = dict()
-clients_time_dict_2 = dict()
-clients_time_dict_3 = dict()
-
-
 client_answer = dict()
 clients_without_answer = []
 
 client_writer_score = dict()
 
-questions = {'pytanie1':'tak', 'pytanie2':'nie', 
-                 'pytanie3':'tak', 'pytanie4':'nie', 
-                 'pytanie5':'tak', 'pytanie6':'nie',
-                 'pytanie7':'tak', 'pytanie8':'nie', 
-                 'pytanie9':'tak', 'pytanie10':'nie'}
+questions = {'Polska jest większa od Nowej Zelandii?':'tak', 
+             'Woda zamarza w 42 stopniach Fahrenheita?':'nie', 
+                 'W Szwajcarii obowiązują cztery języki urzędowe?':'tak', 
+                 'W finale Mistrzostw Świata 1974 w piłce nożnej zmierzyły się ze sobą reprezentacje Brazylii i Niemiec.':'nie', 
+                 'Średnia odległość Ziemi od Słońca to około 150 000 000 km?':'tak', 
+                 'Kość promieniowa to kość długa wchodząca w skład kości kończyn górnych.':'nie',
+                 'Crvena Zvezda to klub piłkarski z siedzibą w Belgradzie?':'tak', 
+                 'Jedno z największych przedsiębiorstw na świecie, Sinopec, ma swoją siedzibę w Stanach Zjednoczonych?':'nie', 
+                 'Nie” to po hiszpańsku „No"?':'tak', 
+                 'Pierwszy król Polski, Bolesław Chrobry, był koronowany w 1033 roku?':'nie',
+                 'Tanzania to państwo leżące w Ameryce Południowej?':'nie',
+                 'Stambuł leży zarówno w Europie, jak i w Azji?':'tak',
+                 'Kalendarzowa zima kończy się 21 marca?':'tak'}
 
 questions_pool = random.sample(questions.keys(), 3)
 question_pool_item = ''
@@ -34,14 +34,6 @@ question_pool_item = ''
 players_score = [[] for _ in range(MAX_PLAYERS)]
 is_more_then_5_sec = False
 
-def get_winner_in_clients(clients_dicts):
-    for key, value in clients_dicts.items():
-        winner = value
-        for time in clients_dicts.values():
-            if time > winner:
-                winner == time
-    return winner
-        
 
 async def get_response(reader):   
     data = await reader.read(100)
@@ -49,10 +41,12 @@ async def get_response(reader):
     striped_text = message.strip()
     return striped_text
 
+
 def answers_matcher(client_text_answer:str):
     """ we have key - question, we have answer - client text answer, 
     want to match client answer to correct answer in dict, 
     want to return number, correct = 1 pt, uncorect = -2 pt """
+    
     print('q pool item is ', question_pool_item)
     correct_answer = questions.get(question_pool_item)
     print('correct answer is ', correct_answer)
@@ -63,19 +57,32 @@ def answers_matcher(client_text_answer:str):
         return 1
     
     if client_text_answer != 'tak' and client_text_answer != 'nie':
-        return "ERROR"
+        return 0
     
     if correct_answer != client_text_answer.lower():
         return -2
     
-    # return -2
+
+def get_sum_on_results_list(players_score_list:list):
+    control_sum = 0
     
-    
+    for i in players_score_list:
+        if i:
+            control_sum +=i
+    return control_sum
+
 async def send_results(clients_writers):
     q_number = 0
+    max_points = 0
     for client_ws in clients_writers:
-        await send_text(writer=client_ws, message='Oto twoje wyniki:')
-        await send_text(writer=client_ws, message = players_score[q_number])
+        
+        
+        sum = get_sum_on_results_list(players_score[q_number])
+        if sum > max_points:
+            max_points = sum
+        await send_text(writer=client_ws, message=f'Oto twoje wyniki calkiem : {sum}')
+        await send_text(writer=client_ws, message = f'A tutaj po pytaniam po koleje {players_score[q_number]}')
+        await send_text(writer=client_ws, message = f'Max wynik to {max_points}')
         q_number+=1
 
 async def receive_broadcast_response(clients_readers, client_writers):
@@ -114,8 +121,12 @@ async def send_broadcast_question(clients_writers):
         except IndexError as e:
             print('Index error in send broadcast questions')
             await send_results(clients_writers=clients_writers)
-            global isEnd
-            isEnd = True
+            
+            question_pool_item = random.sample(questions.keys(), 3)
+            print('NEW POOL IS', question_pool_item)
+            
+            return True
+            
     
 async def admin_connection(reader, writer):
     admin_text = await get_response(reader=reader)
@@ -124,6 +135,7 @@ async def admin_connection(reader, writer):
     return False
     
 async def event_loop(reader, writer):
+    # TODO - при повторном подключении игра запускается заново, не надо перезагружать сервер
     clients_writers.append(writer)
     clients_readers.append(reader)
     status = False
@@ -132,11 +144,22 @@ async def event_loop(reader, writer):
         status = await admin_connection(reader=reader, writer=writer)
         
     if status:
-        # start = time.time()
-        # count = -1
         while True:
             try:
-                await send_broadcast_question(clients_writers=clients_writers)
+                is_end = await send_broadcast_question(clients_writers=clients_writers)
+                print(is_end)
+                if is_end:
+                
+                    # Close sockets
+                    for writer in clients_writers:
+                        writer.close()
+                        
+                    # clients_writers.clear()
+                    # clients_readers.clear()
+                    # is_end = False
+                    # status = True
+                     
+                    break
             except ConnectionResetError as e:
                 print('admin disconnect!')
             await receive_broadcast_response(clients_readers=clients_readers,
@@ -158,8 +181,9 @@ async def main():
     print(f'Serving on {addrs}')
 
     async with server:
+        
         await server.serve_forever()
-        if isEnd:
-            server.close()
+        
+        # server.close()
 
 asyncio.run(main())
