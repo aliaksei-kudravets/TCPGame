@@ -8,6 +8,7 @@ clients_writers = []
 clients_readers = [] 
 responses = []
 MAX_PLAYERS = 4
+QUESTIONS_NUMBER = 7
 
 client_answer = dict()
 clients_without_answer = []
@@ -17,9 +18,9 @@ client_writer_score = dict()
 questions = {'Polska jest większa od Nowej Zelandii?':'tak', 
              'Woda zamarza w 42 stopniach Fahrenheita?':'nie', 
                  'W Szwajcarii obowiązują cztery języki urzędowe?':'tak', 
-                 'W finale Mistrzostw Świata 1974 w piłce nożnej zmierzyły się ze sobą reprezentacje Brazylii i Niemiec.':'nie', 
+                 'W finale Mistrzostw Świata 1974 w piłce nożnej zmierzyły się ze sobą reprezentacje Brazylii i Niemiec?':'nie', 
                  'Średnia odległość Ziemi od Słońca to około 150 000 000 km?':'tak', 
-                 'Kość promieniowa to kość długa wchodząca w skład kości kończyn górnych.':'nie',
+                 'Kość promieniowa to kość długa wchodząca w skład kości kończyn górnych?':'nie',
                  'Crvena Zvezda to klub piłkarski z siedzibą w Belgradzie?':'tak', 
                  'Jedno z największych przedsiębiorstw na świecie, Sinopec, ma swoją siedzibę w Stanach Zjednoczonych?':'nie', 
                  'Nie” to po hiszpańsku „No"?':'tak', 
@@ -28,7 +29,7 @@ questions = {'Polska jest większa od Nowej Zelandii?':'tak',
                  'Stambuł leży zarówno w Europie, jak i w Azji?':'tak',
                  'Kalendarzowa zima kończy się 21 marca?':'tak'}
 
-questions_pool = random.sample(questions.keys(), 3)
+questions_pool = random.sample(questions.keys(), QUESTIONS_NUMBER)
 question_pool_item = ''
 
 players_score = [[] for _ in range(MAX_PLAYERS)]
@@ -42,7 +43,7 @@ async def get_response(reader):
     return striped_text
 
 
-def answers_matcher(client_text_answer:str):
+async def answers_matcher(client_text_answer:str, client_ws):
     """ we have key - question, we have answer - client text answer, 
     want to match client answer to correct answer in dict, 
     want to return number, correct = 1 pt, uncorect = -2 pt """
@@ -57,6 +58,7 @@ def answers_matcher(client_text_answer:str):
         return 1
     
     if client_text_answer != 'tak' and client_text_answer != 'nie':
+        await send_text(message='ERROR', writer=client_ws)
         return 0
     
     if correct_answer != client_text_answer.lower():
@@ -72,14 +74,15 @@ def get_sum_on_results_list(players_score_list:list):
     return control_sum
 
 async def send_results(clients_writers):
+    
     q_number = 0
     max_points = 0
+    
     for client_ws in clients_writers:
-        
-        
         sum = get_sum_on_results_list(players_score[q_number])
-        if sum > max_points:
+        if sum >= max_points:
             max_points = sum
+        
         await send_text(writer=client_ws, message=f'Oto twoje wyniki calkiem : {sum}')
         await send_text(writer=client_ws, message = f'A tutaj po pytaniam po koleje {players_score[q_number]}')
         await send_text(writer=client_ws, message = f'Max wynik to {max_points}')
@@ -98,7 +101,7 @@ async def receive_broadcast_response(clients_readers, client_writers):
             text:str = await asyncio.wait_for(get_response(reader=reader),
                                           timeout=10)
             # print('CLIENT SEND', text)
-            player_point = answers_matcher(text.replace(' ', ''))
+            player_point = await answers_matcher(text.replace(' ', ''), client_ws=writer)
             players_score[cl_id].append(player_point)
             cl_id+=1
             print(players_score)
@@ -110,6 +113,10 @@ async def send_text(writer, message):
     text = "{}\n".format(message)
     writer.write(text.encode())
     await writer.drain()
+    
+async def send_broadcast_text(client_writers, text:str):
+    for client in client_writers:
+        await send_text(writer=client, message=text)
 
 async def send_broadcast_question(clients_writers):
         try:
@@ -122,11 +129,11 @@ async def send_broadcast_question(clients_writers):
             print('Index error in send broadcast questions')
             await send_results(clients_writers=clients_writers)
             
-            question_pool_item = random.sample(questions.keys(), 3)
+            question_pool_item = random.sample(questions.keys(), QUESTIONS_NUMBER)
             print('NEW POOL IS', question_pool_item)
-            
-            return True
-            
+            raise KeyboardInterrupt
+            # return True
+
     
 async def admin_connection(reader, writer):
     admin_text = await get_response(reader=reader)
@@ -144,6 +151,7 @@ async def event_loop(reader, writer):
         status = await admin_connection(reader=reader, writer=writer)
         
     if status:
+        
         while True:
             try:
                 is_end = await send_broadcast_question(clients_writers=clients_writers)
@@ -168,7 +176,7 @@ async def event_loop(reader, writer):
             
             for client_writer in clients_without_answer:
                 await send_text(writer=client_writer, 
-                                message='Timeout! Be faster')
+                                message='Sorki, nie dostałem odpowiedzi , timeout!')
                     
             
   
