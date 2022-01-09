@@ -1,4 +1,5 @@
 import asyncio
+from os import name
 import random
 import time
 import itertools
@@ -29,6 +30,8 @@ questions = {'Polska jest większa od Nowej Zelandii?':'tak',
                  'Stambuł leży zarówno w Europie, jak i w Azji?':'tak',
                  'Kalendarzowa zima kończy się 21 marca?':'tak'}
 
+INSTRUCTION = 'INSTRUCTION!'
+
 questions_pool = random.sample(questions.keys(), QUESTIONS_NUMBER)
 question_pool_item = ''
 
@@ -46,7 +49,7 @@ async def get_response(reader):
 async def answers_matcher(client_text_answer:str, client_ws):
     """ we have key - question, we have answer - client text answer, 
     want to match client answer to correct answer in dict, 
-    want to return number, correct = 1 pt, uncorect = -2 pt """
+    want to return number, correct = 1 pt, uncorect = -2 pt, if error  = 0 """
     
     print('q pool item is ', question_pool_item)
     correct_answer = questions.get(question_pool_item)
@@ -107,16 +110,23 @@ async def receive_broadcast_response(clients_readers, client_writers):
             print(players_score)
         except asyncio.TimeoutError:
             clients_without_answer.append(writer)
+        except IOError:
+            print('ADMIN DISCONNECT')
+            raise KeyboardInterrupt
         
 
 async def send_text(writer, message):
     text = "{}\n".format(message)
-    writer.write(text.encode())
-    await writer.drain()
+    try:
+        writer.write(text.encode())
+        await writer.drain()
+    except ConnectionResetError as e:
+            pass
     
 async def send_broadcast_text(client_writers, text:str):
     for client in client_writers:
         await send_text(writer=client, message=text)
+
 
 async def send_broadcast_question(clients_writers):
         try:
@@ -136,6 +146,8 @@ async def send_broadcast_question(clients_writers):
 
     
 async def admin_connection(reader, writer):
+    await send_text(writer=writer, 
+                    message='jestes 1 , mozesz startowac gre , wpisz start')
     admin_text = await get_response(reader=reader)
     if admin_text == 'start':
         return True
@@ -151,7 +163,8 @@ async def event_loop(reader, writer):
         status = await admin_connection(reader=reader, writer=writer)
         
     if status:
-        
+        await send_broadcast_text(client_writers=clients_writers, 
+                                  text=INSTRUCTION)
         while True:
             try:
                 is_end = await send_broadcast_question(clients_writers=clients_writers)
@@ -161,15 +174,11 @@ async def event_loop(reader, writer):
                     # Close sockets
                     for writer in clients_writers:
                         writer.close()
-                        
-                    # clients_writers.clear()
-                    # clients_readers.clear()
-                    # is_end = False
-                    # status = True
                      
                     break
             except ConnectionResetError as e:
                 print('admin disconnect!')
+                raise KeyboardInterrupt
             await receive_broadcast_response(clients_readers=clients_readers,
                                             client_writers=clients_writers)
                                        
@@ -181,17 +190,33 @@ async def event_loop(reader, writer):
             
   
     
-async def main():
-    server = await asyncio.start_server(
+# async def main():
+#     server = await asyncio.start_server(
+#         event_loop, '127.0.0.1', 4008)
+
+#     addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
+#     print(f'Serving on {addrs}')
+
+#     async with server:
+        
+#         await server.serve_forever()
+        
+#         server.close()
+
+# asyncio.run(main())
+
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    server_gen = asyncio.start_server(
         event_loop, '127.0.0.1', 4008)
-
-    addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
-    print(f'Serving on {addrs}')
-
-    async with server:
-        
-        await server.serve_forever()
-        
-        # server.close()
-
-asyncio.run(main())
+    
+    server = loop.run_until_complete(server_gen)
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        # print('CTRL C PRESS')
+        loop.stop() # Press Ctrl+C to stop
+    finally:
+        loop.stop()
+    
