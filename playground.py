@@ -56,7 +56,7 @@ async def answers_matcher(client_text_answer:str, client_ws):
     print('correct answer is ', correct_answer)
     
     print(f'client send {client_text_answer}')
-    print(type(client_text_answer))
+    
     if correct_answer == client_text_answer.lower():
         return 1
     
@@ -81,14 +81,21 @@ async def send_results(clients_writers):
     q_number = 0
     max_points = 0
     
+    
+    
     for client_ws in clients_writers:
         sum = get_sum_on_results_list(players_score[q_number])
+        
         if sum >= max_points:
             max_points = sum
-        
+    
         await send_text(writer=client_ws, message=f'Oto twoje wyniki calkiem : {sum}')
         await send_text(writer=client_ws, message = f'A tutaj po pytaniam po koleje {players_score[q_number]}')
-        await send_text(writer=client_ws, message = f'Max wynik to {max_points}')
+        if len(clients_writers) == 1:
+            max_points == sum
+            await send_text(writer=client_ws, message = f'Max wynik to {sum}')
+        else:
+            await send_text(writer=client_ws, message = f'Max wynik to {max_points}')
         q_number+=1
 
 async def receive_broadcast_response(clients_readers, client_writers):
@@ -103,7 +110,7 @@ async def receive_broadcast_response(clients_readers, client_writers):
         try:
             text:str = await asyncio.wait_for(get_response(reader=reader),
                                           timeout=10)
-            # print('CLIENT SEND', text)
+            
             player_point = await answers_matcher(text.replace(' ', ''), client_ws=writer)
             players_score[cl_id].append(player_point)
             cl_id+=1
@@ -130,17 +137,17 @@ async def send_broadcast_text(client_writers, text:str):
 
 async def send_broadcast_question(clients_writers):
         try:
-            print('QUESTIONS LIST IS' , questions_pool)
+            # print('QUESTIONS LIST IS' , questions_pool)
             global question_pool_item
             question_pool_item = questions_pool.pop()
             for ws in clients_writers:
                 await send_text(writer=ws, message=question_pool_item)
         except IndexError as e:
-            print('Index error in send broadcast questions')
+            # print('Index error in send broadcast questions')
             await send_results(clients_writers=clients_writers)
             
             question_pool_item = random.sample(questions.keys(), QUESTIONS_NUMBER)
-            print('NEW POOL IS', question_pool_item)
+            # print('NEW POOL IS', question_pool_item)
             raise KeyboardInterrupt
             # return True
 
@@ -169,6 +176,7 @@ async def event_loop(reader, writer):
             try:
                 is_end = await send_broadcast_question(clients_writers=clients_writers)
                 print(is_end)
+                
                 if is_end:
                 
                     # Close sockets
