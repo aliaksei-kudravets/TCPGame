@@ -79,7 +79,7 @@ def get_winner(players_score:list):
 async def send_results(clients_writers):
     q_number = 0
     max_points = 0
-
+    winner_point = -100
     for client_ws in clients_writers:
         
         sum_of_points = sum(players_score[q_number])
@@ -103,13 +103,25 @@ async def send_results(clients_writers):
         
         await send_text(writer=client_ws, message='Wygral gracz z {} punktem(ami)'.format(winner_point))
         
-        await send_text(writer=client_ws, 
-                        message='Koniec')
         
         q_number += 1
         
         # TODO for client writers score 
         # if sum(score) == winer point : send text (ws, wygral)
+    for client, nickname in client_writer_nick.items():
+            await send_text(writer=client, message='Jestes {}-iem'.format(nickname))
+            
+     
+    nick_for_all = ''           
+    for client, score_list in client_writer_score.items():
+            if sum(score_list) == winner_point:
+                nickname = client_writer_nick.get(client)
+                nick_for_all = nickname
+                await send_text(writer=client, 
+                                message='{} ale mądry jestes! Pozdro, wygrales/as'.format(nickname))
+    await send_broadcast_text(client_writers=clients_writers, text='Wygral {}'.format(nick_for_all))
+                
+    await send_broadcast_text(client_writers=clients_writers, text='Koniec!')
 
 
 async def receive_broadcast_response(clients_readers, client_writers):
@@ -132,7 +144,7 @@ async def receive_broadcast_response(clients_readers, client_writers):
             
             global client_writer_score
             
-            client_writer_score.update({reader: tmp})
+            client_writer_score.update({writer: tmp})
             
             # print(players_score)
         except asyncio.TimeoutError:
@@ -202,10 +214,11 @@ async def event_loop(reader, writer):
     if status:
         await send_broadcast_text(client_writers=clients_writers,
                                   text=INSTRUCTION)
+        
+        
         while True:
             try:
                 is_end = await send_broadcast_question(clients_writers_list=clients_writers)
-                print(is_end)
 
                 if is_end:
                     # Close sockets
@@ -228,7 +241,7 @@ async def event_loop(reader, writer):
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     server_gen = asyncio.start_server(
-        event_loop, '127.0.0.1', 4011)
+        event_loop, '127.0.0.1', 4017)
 
     server = loop.run_until_complete(server_gen)
     try:

@@ -1,13 +1,13 @@
 import asyncio
 import sys
 
-async def tcp_netcat_client(message=''):
+async def tcp_netcat_client(ip, port):
     
     reader, writer = await asyncio.open_connection(
-        '127.0.0.1', 4008)
+        ip, int(port))
 
     
-    while writer:
+    while True:
         data = await reader.read(256)
         # print(f'Received from server: {data.decode()!r}')
         print(data.decode())
@@ -19,4 +19,4 @@ async def tcp_netcat_client(message=''):
 if __name__ == '__main__':
     ip = sys.argv[1]
     port = sys.argv[2]
-    asyncio.run(tcp_netcat_client('start'))
+    asyncio.run(tcp_netcat_client(ip, port))
