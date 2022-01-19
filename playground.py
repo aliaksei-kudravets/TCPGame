@@ -36,7 +36,7 @@ is_more_then_5_sec = False
 
 
 async def get_response(reader):
-    data = await reader.read(100)
+    data = await reader.read(256)
     message = data.decode()
     striped_text = message.strip()
     return striped_text
@@ -63,16 +63,27 @@ async def answers_matcher(client_text_answer: str, client_ws):
     if correct_answer != client_text_answer.lower():
         return -2
 
+def get_winner(players_score:list):
+    res = -100
+    for small_list in players_score:
+        if len(small_list) != 0:
+            
+            tmp_sum = sum(small_list)
+            
+            if tmp_sum > res:
+                res = tmp_sum
+    
+    return res
 
 async def send_results(clients_writers):
     q_number = 0
     max_points = 0
 
     for client_ws in clients_writers:
-        # sum_of_points = get_sum_on_results_list(players_score[q_number])
+        
         sum_of_points = sum(players_score[q_number])
 
-        print('LEN OF CLIENTS IS ', len(clients_writers))
+    
         if sum_of_points >= max_points:
             max_points = sum_of_points
 
@@ -86,11 +97,10 @@ async def send_results(clients_writers):
                             message=f'Max wynik to {sum_of_points}, wychodzi ze wygrales')
         if len(clients_writers) == 1:
             max_points == sum_of_points
-            # await send_text(writer=client_ws, 
-            #                 message=f'Max wynik to {sum_of_points}')
-        else:
-            await send_text(writer=client_ws, 
-                            message=f'Max wynik to {max_points}')
+        
+        winner_point = get_winner(players_score)
+        
+        await send_text(writer=client_ws, message='Wygral gracz z {} punktem(ami)'.format(winner_point))
             
         await send_text(writer=client_ws, 
                         message='Koniec')
@@ -108,7 +118,7 @@ async def receive_broadcast_response(clients_readers, client_writers):
         writer = client_socket[1]
         try:
             text: str = await asyncio.wait_for(get_response(reader=reader),
-                                               timeout=10)
+                                               timeout=6)
 
             player_point = await answers_matcher(text.replace(' ', ''), client_ws=writer)
             players_score[cl_id].append(player_point)
@@ -129,7 +139,7 @@ async def send_text(writer, message):
         writer.write(text.encode())
         await writer.drain()
     except ConnectionResetError as e:
-        pass
+        print('CLIENT DISCONECTED {} '.format(writer))
 
 
 async def send_broadcast_text(client_writers, text: str):
@@ -172,8 +182,8 @@ async def event_loop(reader, writer):
         status = await admin_connection(reader=reader, writer=writer)
 
     if status:
-        # await send_broadcast_text(client_writers=clients_writers,
-        #                           text=INSTRUCTION)
+        await send_broadcast_text(client_writers=clients_writers,
+                                  text=INSTRUCTION)
         while True:
             try:
                 is_end = await send_broadcast_question(clients_writers_list=clients_writers)
@@ -187,8 +197,8 @@ async def event_loop(reader, writer):
                     break
             except ConnectionResetError as e:
                 # print('admin disconnect!')
-                # raise KeyboardInterrupt
-                pass
+                print('CLIENT DISCONECTED {} '.format(writer))
+                
             await receive_broadcast_response(clients_readers=clients_readers,
                                              client_writers=clients_writers)
 
@@ -200,7 +210,7 @@ async def event_loop(reader, writer):
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     server_gen = asyncio.start_server(
-        event_loop, '127.0.0.1', 4008)
+        event_loop, '127.0.0.1', 4004)
 
     server = loop.run_until_complete(server_gen)
     try:
