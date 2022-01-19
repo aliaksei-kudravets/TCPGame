@@ -11,6 +11,7 @@ client_answer = dict()
 clients_without_answer = []
 
 client_writer_score = dict()
+client_writer_nick = dict()
 
 questions = {'Polska jest większa od Nowej Zelandii?': 'tak',
              'Woda zamarza w 42 stopniach Fahrenheita?': 'nie',
@@ -101,10 +102,14 @@ async def send_results(clients_writers):
         winner_point = get_winner(players_score)
         
         await send_text(writer=client_ws, message='Wygral gracz z {} punktem(ami)'.format(winner_point))
-            
+        
         await send_text(writer=client_ws, 
                         message='Koniec')
+        
         q_number += 1
+        
+        # TODO for client writers score 
+        # if sum(score) == winer point : send text (ws, wygral)
 
 
 async def receive_broadcast_response(clients_readers, client_writers):
@@ -121,9 +126,15 @@ async def receive_broadcast_response(clients_readers, client_writers):
                                                timeout=6)
 
             player_point = await answers_matcher(text.replace(' ', ''), client_ws=writer)
-            players_score[cl_id].append(player_point)
+            tmp = players_score[cl_id]
+            tmp.append(player_point)
             cl_id += 1
-            print(players_score)
+            
+            global client_writer_score
+            
+            client_writer_score.update({reader: tmp})
+            
+            # print(players_score)
         except asyncio.TimeoutError:
             # clients_without_answer.append(writer)
             await send_text(writer=writer,
@@ -148,12 +159,19 @@ async def send_broadcast_text(client_writers, text: str):
 
 
 async def send_broadcast_question(clients_writers_list):
+    '''also load dict writer : nick'''
     try:
         # print('QUESTIONS LIST IS' , questions_pool)
         global question_pool_item
         question_pool_item = questions_pool.pop()
+        
+        count = 0
+        
         for ws in clients_writers_list:
             await send_text(writer=ws, message=question_pool_item)
+            client_writer_nick.update({ws: "Uzytkownik {}".format(count)})
+            count+=1
+            print(client_writer_nick)
     except IndexError as e:
         # print('Index error in send broadcast questions')
         await send_results(clients_writers=clients_writers_list)
@@ -210,7 +228,7 @@ async def event_loop(reader, writer):
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     server_gen = asyncio.start_server(
-        event_loop, '127.0.0.1', 4004)
+        event_loop, '127.0.0.1', 4011)
 
     server = loop.run_until_complete(server_gen)
     try:
